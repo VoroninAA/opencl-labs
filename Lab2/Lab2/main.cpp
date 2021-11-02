@@ -54,13 +54,13 @@ void saxpy_gpu(size_t n, float a, float* x, int incx, float* y, int incy) {
     cl_platform_id* platforms = (cl_platform_id*)malloc(sizeof(cl_platform_id) * platform_count);
     CHK(!clGetPlatformIDs(platform_count, platforms, nullptr));
     cl_context_properties properties[3] = {
-        CL_CONTEXT_PLATFORM, (cl_context_properties)platforms[0], 0
+        CL_CONTEXT_PLATFORM, (cl_context_properties)platforms[1], 0
     };
     cl_uint device_count = 0;
-    clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, 0, nullptr, &device_count);
+    clGetDeviceIDs(platforms[1], CL_DEVICE_TYPE_GPU, 0, nullptr, &device_count);
     cl_device_id* devices = (cl_device_id*)malloc(sizeof(cl_device_id) * device_count);
     CHK(devices);
-    CHK(!clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, device_count, devices, nullptr));
+    CHK(!clGetDeviceIDs(platforms[1], CL_DEVICE_TYPE_GPU, device_count, devices, nullptr));
     cl_context context = clCreateContext(nullptr, 1, &devices[0], nullptr, nullptr, &ret);
     CHK(context);
     cl_mem xs_buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * n * incx, nullptr, nullptr);
@@ -104,9 +104,11 @@ void saxpy_gpu(size_t n, float a, float* x, int incx, float* y, int incy) {
     CHK(!clSetKernelArg(kernel, 4, sizeof(cl_mem), &ys_buff));
     CHK(!clSetKernelArg(kernel, 5, sizeof(int), &incy));
 
+    double start = omp_get_wtime();
     CHK(!clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, &global_work_size, &workgroup_size, 2, buff_events, nullptr));
     CHK(!clFinish(queue));
-
+    double finish = omp_get_wtime();
+    printf("%s time: %lf\n", "saxpy_gpu_processing", finish - start);
     CHK(!clEnqueueReadBuffer(queue, ys_buff, CL_TRUE, 0, sizeof(float) * n * incy, y, 0, nullptr, nullptr));
 
     free(source);
@@ -128,14 +130,14 @@ void daxpy_gpu(size_t n, double a, double* x, int incx, double* y, int incy) {
     CHK(!clGetPlatformIDs(platform_count, platforms, nullptr));
 
     cl_context_properties properties[3] = {
-        CL_CONTEXT_PLATFORM, (cl_context_properties)platforms[0], 0
+        CL_CONTEXT_PLATFORM, (cl_context_properties)platforms[1], 0
     };
     cl_uint device_count = 0;
-    CHK(!clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, 0, nullptr, &device_count));
+    CHK(!clGetDeviceIDs(platforms[1], CL_DEVICE_TYPE_GPU, 0, nullptr, &device_count));
     CHK(device_count);
     cl_device_id* devices = (cl_device_id*)malloc(sizeof(cl_device_id) * device_count);
     CHK(devices);
-    CHK(!clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, device_count, devices, nullptr));
+    CHK(!clGetDeviceIDs(platforms[1], CL_DEVICE_TYPE_GPU, device_count, devices, nullptr));
     cl_context context = clCreateContext(nullptr, 1, &devices[0], nullptr, nullptr, &ret);
     CHK(context);
 
@@ -180,9 +182,13 @@ void daxpy_gpu(size_t n, double a, double* x, int incx, double* y, int incy) {
     CHK(!clSetKernelArg(kernel, 4, sizeof(cl_mem), &ys_buff));
     CHK(!clSetKernelArg(kernel, 5, sizeof(int), &incy));
 
+    double start = omp_get_wtime();
+
+
     CHK(!clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, &global_work_size, &workgroup_size, 2, buff_events, nullptr));
     CHK(!clFinish(queue));
-
+    double finish = omp_get_wtime();
+    printf("%s time: %lf\n", "daxpy_gpu_processing", finish - start);
     CHK(!clEnqueueReadBuffer(queue, ys_buff, CL_TRUE, 0, sizeof(double) * n * incy, y, 0, nullptr, nullptr));
 
     free(source);
@@ -221,7 +227,7 @@ void float_test() {
     int incx, incy;
     float* x = nullptr, * y = nullptr, a;
     auto reset = [&]() {
-        n = 10'000'000;
+        n = 52'000'000;
         incx = 3;
         incy = 2;
         a = .3f;
@@ -249,6 +255,7 @@ void float_test() {
     CHK(validate_results(y, ref_y, n * incy));
     free(x);
     free(y);
+    free(ref_y);
 }
 
 void double_test() {
@@ -256,9 +263,9 @@ void double_test() {
     int incx, incy;
     double* x = nullptr, * y = nullptr, a;
     auto reset = [&]() {
-        n = 20'000'00;
+        n = 15'000'000;
         incx = 3;
-        incy = 2;
+        incy = 3;
         a = .3;
         free(x);
         free(y);
@@ -284,6 +291,7 @@ void double_test() {
     CHK(validate_results(y, ref_y, n * incy));
     free(x);
     free(y);
+    free(ref_y);
 }
 
 int main(int argc, char* argv[]) {
